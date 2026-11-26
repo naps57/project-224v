@@ -121,8 +121,8 @@ def main(argv=None):
     if args.split == "test" and not args.confirmed:
         raise SystemExit("test is run once per final system: add --confirmed if that is what you mean")
 
-    agents = ["no_questions", "llm_only", "greedy_smt", "ours"] if args.patient == "llm" else \
-        ["no_questions", "greedy_smt", "ours"]
+    agents = ["no_questions", "llm_only", "ours", "greedy_smt"] if args.patient == "llm" else \
+        ["no_questions", "ours", "greedy_smt"]
     if args.ablations:
         agents += ["ours_no_answerability", "ours_no_value"]
     patient_list = patients(args.split)  # [(patient, [its candidate trials]), ...]

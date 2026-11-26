@@ -74,3 +74,23 @@ def test_a_group_is_asked_in_one_question(monkeypatch, tmp_path):
                               ("NCT00000577", "patient_has_diagnosis_of_asthma_now"),  # same meaning: one line
                               ("NCT00512837", "patient_has_finding_of_uncontrolled_asthma_now")])
     assert sent[0].startswith("You are a research coordinator screening a patient for clinical trials")
+
+
+def test_intake_comes_first_and_unknown_topics_are_skipped(monkeypatch, tmp_path):
+    from smtstate import TrialState
+
+    states = {NCT: TrialState(NCT, {})}
+    p = interview.LLMPatient()
+    fake_model(monkeypatch, tmp_path, lambda prompt: "I'm not sure." if prompt.startswith("You are role")
+               else "{}" if prompt.startswith("A research") else "A question?")
+    picks = iter([(NCT, BOOL_VAR), (NCT, BOOL_VAR), (NCT, "patient_age_value_recorded_now_in_years")])
+    policy = p.attach(lambda s, asked, r: next(picks))
+    policy(states, set(), None)
+    for _ in interview.INTAKE:
+        p.answer("trec-20211", NCT, BOOL_VAR)
+    assert [t["question"] for t in p.transcript] == list(interview.INTAKE)
+    assert not p.unknown_topics  # "not sure" to an intake question rules out no topic
+    p.answer("trec-20211", NCT, BOOL_VAR)  # "not sure": this topic is now known to be unknown
+    asked = set()
+    assert policy(states, asked, None) == (NCT, "patient_age_value_recorded_now_in_years")  # skipped the topic
+    assert (NCT, BOOL_VAR) in asked

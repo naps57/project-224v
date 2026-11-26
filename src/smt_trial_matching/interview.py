@@ -16,6 +16,7 @@ from smt_trial_matching.answerability import _TIMEFRAME, parse
 from smt_trial_matching.data import load_split, patients, variable
 from smt_trial_matching.llm import ask_llm
 from smt_trial_matching.patient import ask_patient
+from smt_trial_matching.policies import candidate_questions
 
 WRITER_PROMPT = """You are a research coordinator screening a patient for a clinical trial.
 Write ONE short question, in plain everyday language, that asks the patient about this fact:
@@ -26,6 +27,18 @@ GROUP_PROMPT = """You are a research coordinator screening a patient for clinica
 Write ONE short, natural question, in plain everyday language, that covers all of these related facts:
 {meanings}
 Reply with the question only."""
+
+# The first turns of every conversation: a fixed intake in the standard order of a clinical history
+# (background, conditions, medications and allergies, surgeries and social history), the same for every patient.
+INTAKE = (
+    "Could you tell me your age, sex, and roughly your height and weight? And what language are you most "
+    "comfortable speaking and reading?",
+    "What are your main health conditions, and roughly when was each one diagnosed?",
+    "What medications are you taking now, or have taken in the last month, including inhalers, injections and "
+    "supplements? And do you have any drug allergies?",
+    "Have you had any surgeries, procedures or hospital stays? Do you smoke or drink alcohol? And, if it applies "
+    "to you, are you pregnant, breastfeeding, or using birth control?",
+)
 
 GROUP_SIZE = 4  # most facts asked about in one question
 GENERIC_WORDS = frozenset({"patient", "has", "is", "of", "finding", "diagnosis", "undergone", "taking", "exposed",
@@ -41,6 +54,7 @@ Facts (id. type: description):
 {facts}
 
 Rules:
+- Fact 1 is what the coordinator asked about: give it a value whenever the reply settles it.
 - Use only what the reply says. Do not infer that something is false just because it was not mentioned.
 - yes/no facts take true or false; number facts take a number.
 - Examples: "Not that I know of, no" -> false. "Nobody has ever told me I have that" -> false.
@@ -102,29 +116,41 @@ class LLMPatient:
     def __init__(self):
         self.transcript = []
         self.states = None
+        self.unknown_topics = set()  # topics the patient already said they don't know about
 
     def attach(self, policy):
+        """Wrap a policy so the patient can see the trial states, and so a topic the patient already said they
+        don't know about is not asked again (in other words, or for another trial)."""
         def wrapped(states, asked, rng):
             self.states = states
-            return policy(states, asked, rng)
+            pick = policy(states, asked, rng)
+            while pick and topic(pick[1]) in self.unknown_topics:
+                asked.add(pick)  # skipped, not asked: it does not use up a question
+                pick = policy(states, asked, rng)
+            return pick
         return wrapped
 
     def open_facts(self, nct: str, var: str) -> list[tuple[str, str]]:
-        """The asked fact first, then every unanswered fact of the trials that are still undecided."""
+        """The asked fact first, then every fact of the undecided trials that could still change a verdict."""
         facts = [(nct, var)]
         for n, s in (self.states or {}).items():
             if s.status() == "undetermined":
-                facts += [(n, v) for v in s.variables if s.answers.get(v) is None and (n, v) != (nct, var)
-                          and variable(n, v)]
+                facts += [(n, v) for v in candidate_questions(s) if (n, v) != (nct, var) and variable(n, v)]
         return facts
 
     def answer(self, qid: str, nct: str, var: str) -> bool | float | None:
         facts = self.open_facts(nct, var)
-        # Ask about the chosen fact together with up to 3 open facts on the same topic (e.g. asthma ever + now).
-        group = [(nct, var)] + [(n, v) for n, v in facts[1:] if topic(v) == topic(var)][:GROUP_SIZE - 1]
-        question = write_question(group)
+        turn = len(self.transcript)
+        if self.states is not None and turn < len(INTAKE):
+            question = INTAKE[turn]
+        else:
+            # The chosen fact together with up to 3 open facts on the same topic (e.g. asthma ever + now).
+            group = [(nct, var)] + [(n, v) for n, v in facts[1:] if topic(v) == topic(var)][:GROUP_SIZE - 1]
+            question = write_question(group)
         reply = ask_patient(qid, question)
         values = read_reply(question, reply, facts)
+        if question not in INTAKE and not any(topic(v) == topic(var) for _, v in values):
+            self.unknown_topics.add(topic(var))
         for (n, v), x in values.items():
             if (n, v) != (nct, var):
                 self.states[n].answers[v] = x
