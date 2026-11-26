@@ -45,14 +45,13 @@ from smtstate.sim import AnswerKeySimulator  # noqa: E402
 AGENTS = {
     "no_questions": no_questions,  # asks nothing: the starting point
     "llm_only": None,  # Gemini interviews and decides alone, no solver (needs --patient llm)
-    "llm_only_intake": None,  # the same, after our 4 intake questions
     "greedy_smt": greedy_smt,  # the course staff's baseline, the one to beat
     "ours": ours.answerable_informative,  # our agent: P(answered) x value
     "ours_no_answerability": ours.answerable_informative_no_answerability,  # ours without P(answered)
     "ours_no_value": ours.answerable_informative_no_value,  # ours without value
     "ours_hybrid": ours.answerable_informative,  # ours, then Gemini judges the trials Z3 left undecided
 }
-REFERENCES = ("greedy_smt", "llm_only", "llm_only_intake")  # every agent is compared with these
+REFERENCES = ("greedy_smt", "llm_only")  # every agent is compared with these
 BOOTSTRAP_DRAWS = 2000
 SEED = 0
 
@@ -61,8 +60,8 @@ def interview(job):
     """One agent interviews one patient. Returns the log of the conversation.
     The patient is the answer-key lookup (perfect communication) or the LLM patient (a real conversation)."""
     patient, trials, agent, who, budget = job
-    if agent.startswith("llm_only"):
-        return llm_only.interview(patient, trials, budget, intake=agent == "llm_only_intake")
+    if agent == "llm_only":
+        return llm_only.interview(patient, trials, budget)
     sim = LLMPatient() if who == "llm" else AnswerKeySimulator("gpt5_oracle")
     policy = sim.attach(AGENTS[agent]) if who == "llm" else AGENTS[agent]  # lets each reply fill every fact it settles
     log = run_patient(patient, trials, policy, sim, budget=budget)
@@ -132,7 +131,7 @@ def main(argv=None):
     if args.split == "test" and not args.confirmed:
         raise SystemExit("test is run once per final system: add --confirmed if that is what you mean")
 
-    agents = ["no_questions", "llm_only", "llm_only_intake", "ours", "greedy_smt"] if args.patient == "llm" else \
+    agents = ["no_questions", "llm_only", "ours", "greedy_smt"] if args.patient == "llm" else \
         ["no_questions", "ours", "greedy_smt"]
     if args.agents:
         agents = args.agents.split(",")

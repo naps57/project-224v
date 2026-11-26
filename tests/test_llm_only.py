@@ -36,15 +36,6 @@ def test_budget_forces_a_stop_and_bad_json_means_eligible(monkeypatch, tmp_path)
     assert set(log["final_verdicts"].values()) == {"eligible"}
 
 
-def test_intake_comes_first_and_counts_toward_the_budget(monkeypatch, tmp_path):
-    from smt_trial_matching.interview import INTAKE
-
-    scripted(monkeypatch, tmp_path, lambda p: '{"action": "ask", "question": "Q%d?"}' % p.count("Coordinator:")
-             if llm_only.STOP_NOW not in p else '{"action": "stop", "verdicts": {}}')
-    log = llm_only.interview("trec-20211", TRIALS, budget=6, intake=True)
-    assert [t["question"] for t in log["turns"]][:4] == list(INTAKE) and len(log["turns"]) == 6
-
-
 def test_judge_reads_one_word_and_defaults_to_eligible(monkeypatch, tmp_path):
     scripted(monkeypatch, tmp_path, lambda p: "Ineligible.")
     assert llm_only.judge(TRIALS[0], [("Q?", "A.")]) == "ineligible"

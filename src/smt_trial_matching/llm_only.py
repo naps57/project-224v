@@ -12,7 +12,7 @@ import json
 from functools import cache
 
 from smt_trial_matching.data import DATA, ROOT
-from smt_trial_matching.interview import INTAKE, parse_json
+from smt_trial_matching.interview import parse_json
 from smt_trial_matching.llm import ask_llm
 from smt_trial_matching.patient import ask_patient
 
@@ -30,11 +30,10 @@ def trial_text(nct: str) -> str:
     return f"## {nct}: {t['title']}\n{t['inclusion_criteria']}\n{t['exclusion_criteria']}"
 
 
-def interview(qid: str, trials: list[str], budget: int, intake: bool = False) -> dict:
-    """One LLM-only conversation with patient `qid`, in the staff runner's log format. With `intake`, it first
-    asks the same 4 intake questions as our agent (they count toward the budget), then carries on as usual."""
+def interview(qid: str, trials: list[str], budget: int) -> dict:
+    """One LLM-only conversation with patient `qid`, in the staff runner's log format."""
     base = questioner_prompt().replace("{trials}", "\n\n".join(trial_text(n) for n in trials))
-    transcript, verdicts = [(q, ask_patient(qid, q)) for q in INTAKE] if intake else [], None
+    transcript, verdicts = [], None
     while verdicts is None:
         conversation = "\n".join(f"Coordinator: {q}\nPatient: {a}" for q, a in transcript) or "(none yet)"
         prompt = base.replace("{transcript}", conversation) + (STOP_NOW if len(transcript) >= budget else "")

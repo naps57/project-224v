@@ -1,8 +1,8 @@
 """How accountable each agent's verdicts are, from saved dev logs.
 
 1. Backed rejections: of the trials an agent ruled out, how many can Z3 justify from what the patient actually
-   said? Our agent's rejections come from Z3, so each one is backed by construction. For the LLM-only agents, the
-   answer reader turns their own conversation into facts and Z3 checks the trial against them.
+   said? Our agent's rejections come from Z3, so each one is backed by construction. For the LLM-only agent, the
+   answer reader turns its own conversation into facts and Z3 checks the trial against them.
 2. Order: re-run an agent with each patient's trials in reverse order and count verdicts that change.
 
   uv run python -m smt_trial_matching.audit
@@ -48,7 +48,7 @@ def verdict_changes(agent: str, logs: list[dict]) -> tuple[int, int]:
 if __name__ == "__main__":
     sys.path.insert(0, str(ROOT))
     runs = ROOT / "runs" / "dev_llm"
-    for agent in sys.argv[1:] or ["llm_only", "llm_only_intake", "ours"]:
+    for agent in sys.argv[1:] or ["llm_only", "ours"]:
         logs = [json.loads(line) for line in (runs / f"{agent}.jsonl").open()]
         if agent.startswith("llm_only"):
             out, backed = map(sum, zip(*(backed_rejections(log) for log in logs)))
