@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import collections
 import json
+from concurrent.futures import ThreadPoolExecutor
 from functools import cache
 from pathlib import Path
 
@@ -50,22 +51,25 @@ def build(split: str = "dev") -> dict:
     groups = collections.defaultdict(list)
     for name in sorted(names):
         groups[topic(name)].append(name)
+    chunks = [group[i:i + CHUNK] for group in groups.values() for i in range(0, len(group), CHUNK)]
+    chunks = [c for c in chunks if len(c) >= 2]
+
+    def ask(chunk):
+        listed = "\n".join(f"{k}. {'yes/no' if names[n][0] == 'Bool' else 'number'}: {names[n][1]}"
+                           for k, n in enumerate(chunk, 1))
+        return parse_json(ask_llm(LINK_PROMPT.format(facts=listed)))
+
     same, implies = [], []
-    for group in groups.values():
-        for i in range(0, len(group), CHUNK):
-            chunk = group[i:i + CHUNK]
-            if len(chunk) < 2:
-                continue
-            listed = "\n".join(f"{k}. {'yes/no' if names[n][0] == 'Bool' else 'number'}: {names[n][1]}"
-                               for k, n in enumerate(chunk, 1))
-            found = parse_json(ask_llm(LINK_PROMPT.format(facts=listed)))
-            for kind, out in (("same", same), ("implies", implies)):
-                for pair in found.get(kind, []):
-                    if (isinstance(pair, list) and len(pair) == 2 and all(isinstance(k, int) for k in pair)
-                            and all(1 <= k <= len(chunk) for k in pair) and pair[0] != pair[1]):
-                        a, b = chunk[pair[0] - 1], chunk[pair[1] - 1]
-                        if names[a][0] == names[b][0] and (kind == "same" or names[a][0] == "Bool"):
-                            out.append([a, b])
+    with ThreadPoolExecutor(16) as pool:  # independent calls, so several at once
+        answers = list(pool.map(ask, chunks))
+    for chunk, found in zip(chunks, answers):
+        for kind, out in (("same", same), ("implies", implies)):
+            for pair in found.get(kind, []):
+                if (isinstance(pair, list) and len(pair) == 2 and all(isinstance(k, int) for k in pair)
+                        and all(1 <= k <= len(chunk) for k in pair) and pair[0] != pair[1]):
+                    a, b = chunk[pair[0] - 1], chunk[pair[1] - 1]
+                    if names[a][0] == names[b][0] and (kind == "same" or names[a][0] == "Bool"):
+                        out.append([a, b])
     table = {"same": same, "implies": implies}
     TABLE.write_text(json.dumps(table, indent=0))
     return table
