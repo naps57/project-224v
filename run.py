@@ -3,10 +3,10 @@
   uv run python run.py                           # dev patients: no_questions, greedy_smt, ours
   uv run python run.py --ablations               # also two cut-down versions of ours
   uv run python run.py --split test --confirmed  # test patients: run once, on the final agent
-  uv run python run.py --patient llm --budget 15 # talk to the LLM patient instead of the answer key
+  uv run python run.py --patient llm            # talk to the LLM patient instead of the answer key
 
 What it does:
-  1. Each agent interviews each patient, up to 30 questions (--budget), using the course staff's
+  1. Each agent interviews each patient, up to 10 questions (--budget), using the course staff's
      conversation loop (smtstate/runner.py). The patient is the staff's answer-key lookup
      (smtstate/sim.py) or, with --patient llm, our LLM patient (src/smt_trial_matching/interview.py).
      Logs, with transcripts for the LLM patient, are saved to runs/<split>_<patient>/.
@@ -125,7 +125,7 @@ def main(argv=None):
     parser.add_argument("--confirmed", action="store_true", help="required for --split test")
     parser.add_argument("--patient", choices=["lookup", "llm"], default="lookup",
                         help="lookup = answer key (perfect communication), llm = LLM patient")
-    parser.add_argument("--budget", type=int, default=30, help="most questions per patient")
+    parser.add_argument("--budget", type=int, default=10, help="most questions per patient")
     parser.add_argument("--agents", help="comma-separated agents to run instead of the default set")
     args = parser.parse_args(argv)
     if args.split == "test" and not args.confirmed:
