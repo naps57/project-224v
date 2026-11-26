@@ -3,8 +3,10 @@
 Each trial is its own Z3 program, so "has asthma now" in one trial and "diagnosis of asthma now" in another are
 separate variables. Two kinds of link, by variable name:
   same:     a and b mean the same thing (a variable name shared by several trials is always the same).
-  implies:  if a is true then b is true (so if b is false, a is false), e.g. on steroids now -> steroids in the
-            past 12 months.
+  implies:  if a is true then b is true (so if b is false, a is false), e.g. uncontrolled asthma now -> asthma now.
+Links between two different time frames (now, in the history, in the past 12 months...) are left out: patients say
+"past" to mean before now, while the trials' "in the history" includes now, so "no past conditions" would rule out
+a condition the patient has now.
 The table is built once with Gemini, one call per group of facts on the same topic, and saved to links.json.
 During a conversation it is pure logic: `propagate` only ever fills facts that are still unknown.
 
@@ -19,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import cache
 from pathlib import Path
 
+from smt_trial_matching.answerability import parse
 from smt_trial_matching.data import patients, variable
 from smt_trial_matching.interview import describe, parse_json, topic
 from smt_trial_matching.llm import ask_llm
@@ -68,11 +71,18 @@ def build(split: str = "dev") -> dict:
                 if (isinstance(pair, list) and len(pair) == 2 and all(isinstance(k, int) for k in pair)
                         and all(1 <= k <= len(chunk) for k in pair) and pair[0] != pair[1]):
                     a, b = chunk[pair[0] - 1], chunk[pair[1] - 1]
-                    if names[a][0] == names[b][0] and (kind == "same" or names[a][0] == "Bool"):
+                    if names[a][0] == names[b][0] and (kind == "same" or names[a][0] == "Bool") \
+                            and _same_time_frame(a, b):
                         out.append([a, b])
     table = {"same": same, "implies": implies}
     TABLE.write_text(json.dumps(table, indent=0))
     return table
+
+
+def _same_time_frame(a: str, b: str) -> bool:
+    """False when both facts name a time frame and the two differ (e.g. now and in the history)."""
+    ta, tb = parse(a)["timeframe"], parse(b)["timeframe"]
+    return ta == tb or "none" in (ta, tb)
 
 
 @cache

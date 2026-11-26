@@ -117,3 +117,11 @@ def test_links_fill_the_same_and_implied_facts_only_when_unknown(monkeypatch, tm
     assert ("NCT00859274", "patient_has_finding_of_asthma_now") not in links.propagate(
         states, {("NCT00000577", "patient_has_diagnosis_of_asthma_now"): True})
     links._table.cache_clear()
+
+
+def test_links_between_time_frames_are_left_out():
+    from smt_trial_matching.links import _same_time_frame
+
+    assert not _same_time_frame("patient_has_diagnosis_of_acute_pancreatitis_now",
+                                "patient_has_diagnosis_of_acute_pancreatitis_inthehistory")
+    assert _same_time_frame("patient_has_diagnosis_of_asthma_now", "patient_has_finding_of_asthma_now")

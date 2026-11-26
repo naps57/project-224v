@@ -2,7 +2,7 @@
 
   uv run python run.py                           # dev patients: no_questions, greedy_smt, ours
   uv run python run.py --ablations               # also two cut-down versions of ours
-  uv run python run.py --split test --confirmed  # test patients: run once, on the final agent
+  uv run python run.py --split test --confirmed  # test patients
   uv run python run.py --patient llm            # talk to the LLM patient instead of the answer key
 
 What it does:
@@ -130,7 +130,7 @@ def main(argv=None):
     parser.add_argument("--agents", help="comma-separated agents to run instead of the default set")
     args = parser.parse_args(argv)
     if args.split == "test" and not args.confirmed:
-        raise SystemExit("test is run once per final system: add --confirmed if that is what you mean")
+        raise SystemExit("the test split needs --confirmed")
 
     agents = ["no_questions", "llm_only", "ours", "greedy_smt"] if args.patient == "llm" else \
         ["no_questions", "ours", "greedy_smt"]

@@ -69,7 +69,7 @@ NCT00287378: ineligible
 
 ## Results
 
-Final system, frozen on dev before the test split was run once: 4-question intake, then our question choice,
+Final system, frozen on dev: 4-question intake, then our question choice,
 10 questions in total. Accuracy over (patient, trial) pairs after 10 questions. Significance is a two-sided
 paired bootstrap over patients (2,000 re-draws), as printed by `run.py`. Logs of these runs are in `results/`.
 
@@ -97,6 +97,12 @@ paired bootstrap over patients (2,000 re-draws), as printed by `run.py`. Logs of
   greedy_smt by +0.112 (p = 0.013).
 - **The hybrid** changes only the trials Z3 leaves undecided. On dev Gemini's verdicts there fixed 14 and broke
   14 (no net change); on test they added 3.4 points. Its Gemini verdicts are not verifiable.
+- **Fact linking** (`ours_linked`, dev only) lets one answer fill the same fact in every trial. Each trial is its
+  own Z3 program, so "has asthma now" in one trial and "diagnosis of asthma now" in another are separate
+  variables. A table of "same as" and "implies" links between them (`links.py`, built once with Gemini) fills
+  every linked fact by logic. Links between two different time frames are left out: patients say "past" to mean
+  before now, while the trials' "in the history" includes now, so "no past conditions" would rule out a
+  condition the patient has now. On dev: 0.787 vs 0.782 for ours (+0.090 over llm_only, p = 0.022).
 - **Every verdict of ours is decided by Z3** and can be explained with the criterion and the answer behind it
   (`explain.py`); the LLM-only baseline's verdicts cannot.
 
@@ -121,12 +127,8 @@ table of GPT-5's reading of each note (`smtstate/sim.py`, `data/answer_keys/gpt5
 
 ## What could come next
 
-- **Link the same fact across trials.** Each trial is its own Z3 program, so "has asthma now" in one trial and
-  "diagnosis of asthma now" in another are separate variables. A fixed table of "same as" and "implies" links
-  (e.g. on oral steroids now → steroids in the past month → steroids in the past year) would let one answer
-  fill every linked fact by logic rather than by the reader, and stop reworded repeat questions.
 - **Catch contradictions.** With facts linked across trials, Z3 can find answers that conflict and the agent
-  can ask a clarifying question. Today no trial ends with conflicting answers, so this waits on the links.
+  can ask a clarifying question. The fact links make this possible now.
 - **Ask fewer questions patients can't answer.** About two thirds of the questions after the intake get
   "not sure". P(answered) was fit on the GPT-5 answer key, which knows more than the patient says.
 
@@ -144,7 +146,7 @@ uv run python -m smt_trial_matching.explain results/dev/ours.jsonl trec-202123  
 uv run pytest                                         # tests; tests/test_live.py runs only with a key
 ```
 
-The test split needs `--split test --confirmed`; it is run once per final system. Every Gemini reply is
+The test split needs `--split test --confirmed`. Every Gemini reply is
 cached in `cache/llm/` (temperature 0), so reruns are free and give the same results. Conversation logs,
 with full transcripts, are written to `runs/<split>_<patient>/` in the staff's log format, so
 `eval/evaluate.py` can score them too. The logs of the final runs reported above are in `results/dev/` and
@@ -162,6 +164,7 @@ Our code:
 | `src/smt_trial_matching/patient.py` | The LLM patient (the course's simulator prompt) |
 | `src/smt_trial_matching/llm_only.py` | The LLM-only baseline (the course's questioner prompt) |
 | `src/smt_trial_matching/explain.py` | Explains each ruled-out trial with Z3's unsat core |
+| `src/smt_trial_matching/links.py`, `links.json` | Links the same fact across trials, and the link table |
 | `src/smt_trial_matching/audit.py` | How many of the LLM-only agent's rejections Z3 can back, and whether trial order changes verdicts |
 | `src/smt_trial_matching/llm.py` | Gemini calls, cached on disk |
 | `src/smt_trial_matching/data.py` | Reads the dataset |
