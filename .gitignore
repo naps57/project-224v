@@ -3,6 +3,7 @@
 
 # run outputs
 runs/
+cache/
 logs/*
 !logs/reference/
 

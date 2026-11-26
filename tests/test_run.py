@@ -7,7 +7,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from run import auc, correct_counts, verdicts_at
+from run import auc, correct_counts, show_after, verdicts_at
 
 EP = {"qid": "p", "trials": ["A", "B"], "initial_verdicts": {"A": "eligible", "B": "eligible"},
       "turns": [{"verdicts": {"A": "eligible", "B": "eligible"}},
@@ -24,3 +24,8 @@ def test_correct_counts_and_auc():
     correct, pairs = correct_counts([EP], GOLD, budget=4)
     assert correct.tolist() == [[1, 1, 2, 2, 2]] and pairs.tolist() == [2]
     assert auc(np.array([0.5, 0.5, 1.0, 1.0, 1.0]), 4) == (0.5 + 0.75 + 1.0 + 1.0) / 4
+
+
+def test_shown_question_counts_follow_the_budget():
+    assert show_after(30) == [0, 5, 10, 20, 30]
+    assert show_after(15) == [0, 5, 10, 15]

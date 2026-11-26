@@ -9,6 +9,7 @@ dependencies = [
     "z3-solver>=4.12",
     "scikit-learn>=1.9.1",
     "numpy>=2.0",
+    "google-genai>=1.0",
 ]
 
 [build-system]
