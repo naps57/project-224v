@@ -25,7 +25,7 @@ The patient has a set of candidate trials (6 on average, up to 23). All start as
 
 The first four turns are a fixed intake, the same for every patient, in the standard order of a clinical
 history: background and language; main conditions; medications and allergies; surgeries, smoking, alcohol
-and pregnancy. Turns 5 to 15 are chosen as above. The conversation stops after 15 questions or when nothing
+and pregnancy. Turns 5 to 10 are chosen as above. The conversation stops after 10 questions or when nothing
 could change a verdict. A trial still undetermined at the end counts as eligible (the course's rule: unknown
 facts do not disqualify).
 
@@ -43,7 +43,7 @@ To explain a verdict, `explain.py` checks each rule on its own and uses Z3's uns
 that break it:
 
 ```
-$ uv run python -m smt_trial_matching.explain runs/dev_llm/ours.jsonl trec-202123
+$ uv run python -m smt_trial_matching.explain results/dev/ours.jsonl trec-202123
 NCT00287378: ineligible
   exclusion criterion: Use of systemic steroid therapy within the preceding 12 months.
     broken by: patient_has_undergone_administration_of_steroid_inthepast12months = True
@@ -56,73 +56,79 @@ NCT00287378: ineligible
 | **ours** | P(answered) × value, over the facts Z3 says could still matter | Z3 | `src/smt_trial_matching/policies.py` |
 | `greedy_smt` (course baseline) | Any fact whose answer could decide a trial | Z3 | `baselines/policies.py` |
 | `llm_only` (course baseline) | Gemini, from the trials' criteria text and the conversation so far | Gemini | `src/smt_trial_matching/llm_only.py` |
+| `ours_hybrid` | As ours | Z3; Gemini only for the trials Z3 leaves undecided (logged as unverified) | `run.py`, `llm_only.judge` |
 
 - **P(answered)** is a logistic regression on the words of a fact's name (`answerability.py`). It is fit on
   dev patients only, and each dev patient is scored by a model fit on the other dev patients.
 - **Value** is how much an answer would settle: ruling a trial out counts most, ruling out one of its cohorts
   counts in proportion, confirming a trial counts a little.
 - `ours` and `greedy_smt` share the same question writer, patient and reader, so comparing them isolates the
-  question choice. `llm_only` talks to the same patient with the same 15-question budget, using the course's
+  question choice. `llm_only` talks to the same patient with the same 10-question budget, using the course's
   prompt (`docs/llm_only_baseline_prompt.md`). As the course allows, its final verdicts are recorded at every
   turn, so it is compared at the final budget.
 
 ## Results
 
-Accuracy over (patient, trial) pairs. Significance is a paired bootstrap over patients (2,000 re-draws).
-All numbers below are on the **dev** split (28 patients, 188 pairs). The test split is run once, on the
-final system.
+Final system, frozen on dev before the test split was run once: 4-question intake, then our question choice,
+10 questions in total. Accuracy over (patient, trial) pairs after 10 questions. Significance is a two-sided
+paired bootstrap over patients (2,000 re-draws), as printed by `run.py`. Logs of these runs are in `results/`.
 
-**Current system, real conversation, 15 questions** (before the 4-question intake; the intake run is in
-progress):
-
-| Agent | Accuracy at 15 | Questions per patient |
-|---|---|---|
-| no questions | 0.532 | 0 |
-| greedy_smt | 0.628 | 14.4 |
-| llm_only | 0.697 | 3.5 |
-| **ours** | **0.739** | 13.7 |
-
-| Comparison | Gap at 15 | 95% CI | p |
+| Agent | Dev (28 patients, 188 pairs) | Test (29 patients, 175 pairs) | Dev + test (57 patients) |
 |---|---|---|---|
-| ours − greedy_smt | +0.112 | +0.021 to +0.204 | **0.013** |
-| ours − llm_only | +0.043 | −0.032 to +0.116 | 0.311 |
-| llm_only − greedy_smt | +0.069 | −0.029 to +0.182 | 0.212 |
+| no questions | 0.532 | 0.514 | 0.523 |
+| llm_only | 0.697 | 0.669 | 0.683 |
+| greedy_smt | 0.734 | 0.737 | 0.736 |
+| **ours** | **0.782** | **0.760** | **0.771** |
+| ours_hybrid | 0.782 | 0.794 | 0.788 |
 
-Ours beats greedy significantly. Ours is ahead of LLM-only but not significantly: with 28 patients a gap of
-about 7.5 points is needed. At worst ours is about 3 points behind LLM-only, and every one of its verdicts is
-checkable.
+| Comparison | Dev | Test | Dev + test |
+|---|---|---|---|
+| ours − llm_only | +0.085 [+0.010, +0.176], **p = 0.023** | +0.091 [−0.066, +0.283], p = 0.353 | +0.088 [−0.003, +0.184], p = 0.063 |
+| ours − greedy_smt | +0.048 [−0.005, +0.101], p = 0.094 | +0.023 [−0.043, +0.090], p = 0.599 | +0.036 [−0.008, +0.080], p = 0.111 |
+| ours_hybrid − llm_only | +0.085 [−0.026, +0.225], p = 0.213 | +0.126 [−0.045, +0.310], p = 0.182 | +0.105 [−0.003, +0.218], p = 0.061 |
 
-**What each change added** (ours, accuracy at 15):
+- **Ours beats the LLM-only baseline by about 9 points on both dev and the held-out test patients.** It is
+  significant on dev; on test alone it is not, because the test gain is concentrated in a few patients with
+  many trials (net +16 correct verdicts: +13 on trec-202159, which has 17 trials, +7 on one other patient, and
+  −4 across the remaining 27 patients). Pooling dev and test (28 of the 57 patients were used during development) gives p = 0.063.
+- **Ours is ahead of greedy_smt on dev and test, but not significantly.** Both share the intake, the question
+  writer and the answer reader, so this row measures only the question choice, over the 6 questions after the
+  intake. With more questions the gap is larger: on dev, at 15 questions without the intake, ours beat
+  greedy_smt by +0.112 (p = 0.013).
+- **The hybrid** changes only the trials Z3 leaves undecided. On dev Gemini's verdicts there fixed 14 and broke
+  14 (no net change); on test they added 3.4 points. Its Gemini verdicts are not verifiable.
+- **Every verdict of ours is decided by Z3** and can be explained with the criterion and the answer behind it
+  (`explain.py`); the LLM-only baseline's verdicts cannot.
+
+**What each change added** (ours, dev):
 
 | Step | ours | llm_only |
 |---|---|---|
-| First LLM conversation: one fact per question, reader keeps only the asked fact | 0.633 | 0.697 |
+| First LLM conversation: one fact per question, reader keeps only the asked fact (15 questions) | 0.633 | 0.697 |
 | Reader fills every fact a reply settles | 0.713 | 0.697 |
 | Related facts asked together in one question | 0.739 | 0.697 |
-| + 4-question intake, topic skipping, leaner reader | 0.761 | 0.697 |
+| + 4-question intake and topic skipping, 10 questions | 0.782 | 0.697 |
 
-**P(answered) matters in conversation.** Removing it costs 4.8 points (0.713 → 0.665, p = 0.12). With the
-old lookup patient it changed almost nothing (AUC 0.700 vs 0.695).
+The budget is 10 questions because on dev accuracy peaked there: later answers were mostly "not sure" and
+occasionally pushed a correct verdict the wrong way.
 
 **Reference: lookup patient (perfect communication).** Before the LLM conversation, the patient was a lookup
-table of GPT-5's reading of each note (`smtstate/sim.py`, `data/answer_keys/gpt5_oracle.jsonl`). At 15
-questions on dev: ours 0.713, greedy 0.596. On test at 30 questions: ours 0.760, greedy 0.646 (+0.114,
-p = 0.034).
+table of GPT-5's reading of each note (`smtstate/sim.py`, `data/answer_keys/gpt5_oracle.jsonl`). On test at
+30 questions: ours 0.760, greedy_smt 0.646 (+0.114, p = 0.034).
 
 **Answer reader check.** On 103 facts from 2 dev patients, the reader agreed with the GPT-5 answer key on
 89%, missed 7% (said unknown), gave a value where the key said unknown on 4%, and gave a wrong value on 0%.
 
-## What we plan to change
+## What could come next
 
 - **Link the same fact across trials.** Each trial is its own Z3 program, so "has asthma now" in one trial and
   "diagnosis of asthma now" in another are separate variables. A fixed table of "same as" and "implies" links
   (e.g. on oral steroids now → steroids in the past month → steroids in the past year) would let one answer
-  fill every linked fact by logic rather than by the reader. It would also stop reworded repeat questions.
+  fill every linked fact by logic rather than by the reader, and stop reworded repeat questions.
 - **Catch contradictions.** With facts linked across trials, Z3 can find answers that conflict and the agent
   can ask a clarifying question. Today no trial ends with conflicting answers, so this waits on the links.
-- **Retrain P(answered) on the LLM patient.** It was fit on the GPT-5 answer key, which knows more than the
-  patient says, so the agent still asks things patients can't know (device models, test scores).
-- **Run the test split once** on the frozen system: ours, greedy_smt and llm_only.
+- **Ask fewer questions patients can't answer.** About two thirds of the questions after the intake get
+  "not sure". P(answered) was fit on the GPT-5 answer key, which knows more than the patient says.
 
 ## Run it
 
@@ -134,14 +140,15 @@ uv run python run.py                                  # dev, lookup patient (no 
 export GEMINI_API_KEY=...
 uv run python run.py --patient llm --budget 10        # dev, LLM patient: ours, greedy_smt, llm_only
 uv run python -m smt_trial_matching.interview trec-202140 trec-202135   # reader check vs the answer key
-uv run python -m smt_trial_matching.explain runs/dev_llm/ours.jsonl trec-202123   # why trials were ruled out
+uv run python -m smt_trial_matching.explain results/dev/ours.jsonl trec-202123   # why trials were ruled out
 uv run pytest                                         # tests; tests/test_live.py runs only with a key
 ```
 
 The test split needs `--split test --confirmed`; it is run once per final system. Every Gemini reply is
 cached in `cache/llm/` (temperature 0), so reruns are free and give the same results. Conversation logs,
 with full transcripts, are written to `runs/<split>_<patient>/` in the staff's log format, so
-`eval/evaluate.py` can score them too.
+`eval/evaluate.py` can score them too. The logs of the final runs reported above are in `results/dev/` and
+`results/test/`.
 
 ## What is in this repo
 
@@ -155,10 +162,12 @@ Our code:
 | `src/smt_trial_matching/patient.py` | The LLM patient (the course's simulator prompt) |
 | `src/smt_trial_matching/llm_only.py` | The LLM-only baseline (the course's questioner prompt) |
 | `src/smt_trial_matching/explain.py` | Explains each ruled-out trial with Z3's unsat core |
+| `src/smt_trial_matching/audit.py` | How many of the LLM-only agent's rejections Z3 can back, and whether trial order changes verdicts |
 | `src/smt_trial_matching/llm.py` | Gemini calls, cached on disk |
 | `src/smt_trial_matching/data.py` | Reads the dataset |
 | `run.py` | Runs the agents and prints accuracy and the bootstrap tests |
 | `tests/` | Free checks with scripted model replies, plus real-Gemini checks in `test_live.py` |
+| `results/` | Logs (with full transcripts) of the final dev and test runs reported above |
 
 Provided by the course staff, used as provided:
 
