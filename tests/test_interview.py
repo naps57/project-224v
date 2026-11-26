@@ -11,10 +11,12 @@ def fake_model(monkeypatch, tmp_path, reply):
     monkeypatch.setattr(llm, "_call_gemini", lambda prompt: reply(prompt))
 
 
-def test_reader_turns_one_word_into_a_typed_value(monkeypatch, tmp_path):
-    for word, value in [("true", True), ("False.", False), ("unknown", None), ("maybe", None)]:
-        fake_model(monkeypatch, tmp_path / word, lambda p, w=word: w)
-        assert interview.read_answer(NCT, BOOL_VAR, "q", "r") is value
+def test_reader_keeps_only_values_of_the_right_type(monkeypatch, tmp_path):
+    facts = [(NCT, BOOL_VAR), (NCT, "patient_age_value_recorded_now_in_years")]
+    fake_model(monkeypatch, tmp_path, lambda p: '```json\n{"1": "yes", "2": 34}\n```')
+    assert interview.read_reply("q", "r", facts) == {facts[1]: 34}  # "yes" is not a bool: left unknown
+    fake_model(monkeypatch, tmp_path / "b", lambda p: "nothing useful")
+    assert interview.read_reply("q", "r", facts) == {}
 
 
 def test_llm_patient_writes_asks_reads_and_logs(monkeypatch, tmp_path):
@@ -23,12 +25,26 @@ def test_llm_patient_writes_asks_reads_and_logs(monkeypatch, tmp_path):
             return "Have your doctors said the brain lesion might be a glioma?"
         if prompt.startswith("You are role-playing a patient"):
             return "Yes, they did."
-        return "true"
+        return '{"1": true}'
 
     fake_model(monkeypatch, tmp_path, reply)
     p = interview.LLMPatient()
     assert p.answer("trec-20211", NCT, BOOL_VAR) is True
     assert p.transcript[0]["reply"] == "Yes, they did."
+
+
+def test_one_reply_fills_other_open_facts(monkeypatch, tmp_path):
+    from smtstate import TrialState
+
+    states = {NCT: TrialState(NCT, {})}
+    p = interview.LLMPatient()
+    p.attach(lambda s, a, r: None)(states, set(), None)
+    facts = p.open_facts(NCT, BOOL_VAR)
+    assert facts[0] == (NCT, BOOL_VAR) and len(facts) > 1
+    i, other = next((i, v) for i, (n, v) in enumerate(facts[1:], 2) if states[NCT].types[v] == "Bool")
+    fake_model(monkeypatch, tmp_path, lambda prompt: '{"%d": false}' % i if prompt.startswith("A research") else "No.")
+    assert p.answer("trec-20211", NCT, BOOL_VAR) is None
+    assert states[NCT].answers[other] is False
 
 
 def test_buckets():

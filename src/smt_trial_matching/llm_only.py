@@ -12,6 +12,7 @@ import json
 from functools import cache
 
 from smt_trial_matching.data import DATA, ROOT
+from smt_trial_matching.interview import parse_json
 from smt_trial_matching.llm import ask_llm
 from smt_trial_matching.patient import ask_patient
 
@@ -29,14 +30,6 @@ def trial_text(nct: str) -> str:
     return f"## {nct}: {t['title']}\n{t['inclusion_criteria']}\n{t['exclusion_criteria']}"
 
 
-def parse(reply: str) -> dict:
-    """The JSON object in the model's reply, or {} if there is none."""
-    try:
-        return json.loads(reply[reply.index("{"):reply.rindex("}") + 1])
-    except ValueError:
-        return {}
-
-
 def interview(qid: str, trials: list[str], budget: int) -> dict:
     """One LLM-only conversation with patient `qid`, in the staff runner's log format."""
     base = questioner_prompt().replace("{trials}", "\n\n".join(trial_text(n) for n in trials))
@@ -44,7 +37,7 @@ def interview(qid: str, trials: list[str], budget: int) -> dict:
     while verdicts is None:
         conversation = "\n".join(f"Coordinator: {q}\nPatient: {a}" for q, a in transcript) or "(none yet)"
         prompt = base.replace("{transcript}", conversation) + (STOP_NOW if len(transcript) >= budget else "")
-        move = parse(ask_llm(prompt))
+        move = parse_json(ask_llm(prompt))
         if move.get("action") == "ask" and move.get("question") and len(transcript) < budget:
             transcript.append((move["question"], ask_patient(qid, move["question"])))
         else:

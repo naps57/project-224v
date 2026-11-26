@@ -62,7 +62,8 @@ def interview(job):
     if agent == "llm_only":
         return llm_only.interview(patient, trials, budget)
     sim = LLMPatient() if who == "llm" else AnswerKeySimulator("gpt5_oracle")
-    log = run_patient(patient, trials, AGENTS[agent], sim, budget=budget)
+    policy = sim.attach(AGENTS[agent]) if who == "llm" else AGENTS[agent]  # lets each reply fill every fact it settles
+    log = run_patient(patient, trials, policy, sim, budget=budget)
     if who == "llm":
         log["transcript"] = sim.transcript
     return log
