@@ -1,11 +1,7 @@
 # Conversational clinical-trial matching
 
-CS224V project, Autumn 2026. John Napoli and Arda Dastan.
-
 An agent asks a patient questions, one fact at a time, to decide which clinical trials the patient is
 eligible for. The goal is to get the verdicts right with as few questions as possible.
-
-## The idea in one paragraph
 
 Each trial's eligibility rules have been turned into logic formulas ahead of time. After every answer, a
 logic solver (Z3) says exactly whether each trial is ruled out, confirmed, or still open. The baseline
@@ -64,19 +60,6 @@ questions and on AUC are positive but not statistically significant.
 **What the ablation says:** removing value costs about 5 points of AUC. Removing P(answered) costs almost
 nothing. So most of the gain over greedy comes from value weighting, not from predicting answerability.
 
-## Run it
-
-Needs Python 3.11+ and [uv](https://docs.astral.sh/uv/). No API key. Nothing here calls a language model.
-
-```bash
-uv sync
-uv run python run.py                # dev split: greedy_smt vs ours (a few minutes)
-uv run python run.py --ablations    # also the two ablations
-uv run pytest                       # tests
-```
-
-The test split needs `--split test --confirmed`. We ran it once on the frozen system and do not tune on it.
-
 ## What is in this repo
 
 Our code:
@@ -97,7 +80,7 @@ Provided by the course staff, used as provided:
 | `baselines/` | The baseline agents, including `greedy_smt` |
 | `eval/` | The staff's evaluation script |
 | `data/` | 57 patients and 263 trials from TREC 2021 Clinical Trials (363 patient and trial pairs), the trial rules as Z3 programs, the answer keys, and the dev/test split |
-| `docs/*.md` | Prompts for two extensions (see "Not built yet") |
+| `docs/*.md` | Prompts for two extensions the course package describes (not built yet) |
 
 `docs/results/` holds our two results write-ups.
 
@@ -107,29 +90,3 @@ The patient is a lookup table, not a language model. Before any experiment, GPT-
 note and recorded the value of every variable in that patient's trials, or "unknown" if the note does not
 say. That file is the answer key (`data/answer_keys/gpt5_oracle.jsonl`). When the agent asks about a
 variable, the simulator returns the stored value. About 57% of the stored values are unknown.
-
-## Limitations
-
-- **No language model runs in the conversation.** Questions are picked by the solver and a small
-  statistical model, and answers come from a lookup table.
-- **P(answered) is fitted to this simulator.** It is trained on the same GPT-5 answer key that plays the
-  patient (on different patients, so it does not see the answers of the patient being tested). It has not
-  been tested against a different kind of patient.
-- **The answer key is a model's reading of the notes,** not a human's. With every answer filled in, the
-  trial programs match the true label on 348 of 363 pairs (0.959), so that is the ceiling.
-- **The test set is small** (29 patients).
-
-## Not built yet
-
-The course package describes two extensions. The prompts are in `docs/`.
-
-- **Language-model patient** (`docs/nl_simulator_prompt.md`): a model role-plays the patient from the note
-  and answers in free text, and the agent maps the reply back onto a variable.
-- **Language-model-only baseline** (`docs/llm_only_baseline_prompt.md`): a model asks free questions and
-  decides from the trial text, with no solver.
-
-## History
-
-This repo is a cleaned-up copy that keeps only what the results above need. The full experiment history,
-including tuning runs, extra analyses and two experiments that used Gemini to predict P(answered) (neither
-beat the logistic regression on dev), is in the original repo: https://github.com/ardadastan04/ddx-genie
