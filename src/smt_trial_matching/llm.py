@@ -26,8 +26,9 @@ def ask_llm(prompt: str) -> str:
 def _call_gemini(prompt: str) -> str:
     from google import genai  # imported here so tests and cached runs work without the package or a key
 
-    # Reads GEMINI_API_KEY from the environment. A call that takes over a minute is retried, up to 5 tries.
+    # Reads GEMINI_API_KEY from the environment. A call that takes over 5 minutes is retried, up to 5 tries
+    # (the answer reader's prompts list every open fact, so they can be long).
     retry = genai.types.HttpRetryOptions(attempts=5)
-    client = genai.Client(http_options=genai.types.HttpOptions(timeout=60_000, retry_options=retry))
+    client = genai.Client(http_options=genai.types.HttpOptions(timeout=300_000, retry_options=retry))
     config = genai.types.GenerateContentConfig(temperature=TEMPERATURE)
     return client.models.generate_content(model=MODEL, contents=prompt, config=config).text.strip()
