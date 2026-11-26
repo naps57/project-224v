@@ -132,7 +132,7 @@ Needs Python 3.11+ and [uv](https://docs.astral.sh/uv/). The LLM runs need a Gem
 uv sync
 uv run python run.py                                  # dev, lookup patient (no API key)
 export GEMINI_API_KEY=...
-uv run python run.py --patient llm --budget 15        # dev, LLM patient: ours, greedy_smt, llm_only
+uv run python run.py --patient llm --budget 10        # dev, LLM patient: ours, greedy_smt, llm_only
 uv run python -m smt_trial_matching.interview trec-202140 trec-202135   # reader check vs the answer key
 uv run python -m smt_trial_matching.explain runs/dev_llm/ours.jsonl trec-202123   # why trials were ruled out
 uv run pytest                                         # tests; tests/test_live.py runs only with a key

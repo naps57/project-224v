@@ -45,12 +45,14 @@ from smtstate.sim import AnswerKeySimulator  # noqa: E402
 AGENTS = {
     "no_questions": no_questions,  # asks nothing: the starting point
     "llm_only": None,  # Gemini interviews and decides alone, no solver (needs --patient llm)
+    "llm_only_intake": None,  # the same, after our 4 intake questions
     "greedy_smt": greedy_smt,  # the course staff's baseline, the one to beat
     "ours": ours.answerable_informative,  # our agent: P(answered) x value
     "ours_no_answerability": ours.answerable_informative_no_answerability,  # ours without P(answered)
     "ours_no_value": ours.answerable_informative_no_value,  # ours without value
+    "ours_hybrid": ours.answerable_informative,  # ours, then Gemini judges the trials Z3 left undecided
 }
-REFERENCES = ("greedy_smt", "llm_only")  # every agent is compared with these
+REFERENCES = ("greedy_smt", "llm_only", "llm_only_intake")  # every agent is compared with these
 BOOTSTRAP_DRAWS = 2000
 SEED = 0
 
@@ -59,13 +61,21 @@ def interview(job):
     """One agent interviews one patient. Returns the log of the conversation.
     The patient is the answer-key lookup (perfect communication) or the LLM patient (a real conversation)."""
     patient, trials, agent, who, budget = job
-    if agent == "llm_only":
-        return llm_only.interview(patient, trials, budget)
+    if agent.startswith("llm_only"):
+        return llm_only.interview(patient, trials, budget, intake=agent == "llm_only_intake")
     sim = LLMPatient() if who == "llm" else AnswerKeySimulator("gpt5_oracle")
     policy = sim.attach(AGENTS[agent]) if who == "llm" else AGENTS[agent]  # lets each reply fill every fact it settles
     log = run_patient(patient, trials, policy, sim, budget=budget)
     if who == "llm":
         log["transcript"] = sim.transcript
+    if agent == "ours_hybrid":
+        # Z3's verdicts stand. Only trials it left undecided get Gemini's verdict, logged as unverified.
+        conversation = [(t["question"], t["reply"]) for t in log.get("transcript", [])]
+        log["unverified"] = [n for n in trials if log["final_status"][n] == "undetermined"]
+        for n in log["unverified"]:
+            log["final_verdicts"][n] = llm_only.judge(n, conversation)
+            if log["turns"]:
+                log["turns"][-1]["verdicts"][n] = log["final_verdicts"][n]
     return log
 
 
@@ -117,12 +127,15 @@ def main(argv=None):
     parser.add_argument("--patient", choices=["lookup", "llm"], default="lookup",
                         help="lookup = answer key (perfect communication), llm = LLM patient")
     parser.add_argument("--budget", type=int, default=30, help="most questions per patient")
+    parser.add_argument("--agents", help="comma-separated agents to run instead of the default set")
     args = parser.parse_args(argv)
     if args.split == "test" and not args.confirmed:
         raise SystemExit("test is run once per final system: add --confirmed if that is what you mean")
 
-    agents = ["no_questions", "llm_only", "ours", "greedy_smt"] if args.patient == "llm" else \
+    agents = ["no_questions", "llm_only", "llm_only_intake", "ours", "greedy_smt"] if args.patient == "llm" else \
         ["no_questions", "ours", "greedy_smt"]
+    if args.agents:
+        agents = args.agents.split(",")
     if args.ablations:
         agents += ["ours_no_answerability", "ours_no_value"]
     patient_list = patients(args.split)  # [(patient, [its candidate trials]), ...]
@@ -162,7 +175,7 @@ def main(argv=None):
     for ref in (r for r in REFERENCES if r in agents):
         print(f"\ndifference from {ref} [95% CI] (paired bootstrap over patients)")
         for agent in agents:
-            if agent in (ref, "no_questions") or (ref == "llm_only" and agent == "greedy_smt"):
+            if agent in (ref, "no_questions") or (ref != "greedy_smt" and not agent.startswith("ours")):
                 continue
             gap_at_end = describe_gap(
                 accuracy[agent][budget] - accuracy[ref][budget],
