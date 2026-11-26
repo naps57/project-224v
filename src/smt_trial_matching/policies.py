@@ -25,12 +25,6 @@ def _undetermined(states: dict) -> list[str]:
     return [n for n, s in states.items() if s.status() == "undetermined"]
 
 
-def _greedy_score(res: dict) -> int:
-    """baselines.policies.greedy_smt's score: 2 per deciding Bool outcome, +1 for Bool."""
-    outcomes = [r for k, r in res.items() if k in (True, False)]
-    return 2 * sum(r != "undetermined" for r in outcomes) + (1 if outcomes else 0)
-
-
 # --------------------------------------------------------------------------------------------------
 # The value of an answer
 

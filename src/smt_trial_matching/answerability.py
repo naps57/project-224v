@@ -159,9 +159,6 @@ class AnswerabilityModel:
     def p_answered(self, name: str, vtype: str) -> float:
         return self.predict(name, vtype)[0]
 
-    def p_true(self, name: str, vtype: str) -> float:
-        return self.predict(name, vtype)[1]
-
     def value_distribution(self, name: str) -> list[tuple[float, float]] | None:
         """Observed values of a numeric variable in the training patients, as (value, probability),
         or None when fewer than MIN_VALUE_PATIENTS answered it (in practice only age qualifies)."""

@@ -37,7 +37,7 @@ patient's record, so many questions come back "not sure" and are wasted. Our age
 Accuracy over (patient, trial) pairs after k questions. AUC is the area under the accuracy curve from 0
 to 30 questions, on a 0 to 1 scale.
 
-**Test split** (29 patients, 175 pairs; run once, details in `docs/results/policy_v1_test.md`)
+**Test split** (29 patients, 175 pairs; run once)
 
 | | k=10 | k=30 | AUC |
 |---|---|---|---|
@@ -80,9 +80,7 @@ Provided by the course staff, used as provided:
 | `baselines/` | The baseline agents, including `greedy_smt` |
 | `eval/` | The staff's evaluation script |
 | `data/` | 57 patients and 263 trials from TREC 2021 Clinical Trials (363 patient and trial pairs), the trial rules as Z3 programs, the answer keys, and the dev/test split |
-| `docs/*.md` | Prompts for two extensions the course package describes (not built yet) |
-
-`docs/results/` holds our two results write-ups.
+| `docs/` | Prompts for two extensions the course package describes (not built yet) |
 
 ## How the patient is simulated
 
