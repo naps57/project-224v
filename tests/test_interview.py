@@ -58,3 +58,19 @@ def test_a_variable_without_a_meaning_is_described_by_its_name():
     v = {"name": "patient_has_finding_of_skin_lesion_now@@precludes_attachment_of_sensors", "meaning": None}
     assert interview.describe(v) == ("patient has finding of skin lesion now, "
                                      "specifically: precludes attachment of sensors")
+
+
+def test_facts_on_the_same_topic_share_one():
+    t = interview.topic
+    assert t("patient_has_finding_of_asthma_now") == t("patient_has_finding_of_asthma_inthehistory") \
+        == t("patient_has_diagnosis_of_asthma_now") == t("patient_has_finding_of_asthma_now@@uncontrolled")
+    assert t("patient_has_finding_of_asthma_now") != t("patient_has_finding_of_diabetes_mellitus_now")
+
+
+def test_a_group_is_asked_in_one_question(monkeypatch, tmp_path):
+    sent = []
+    fake_model(monkeypatch, tmp_path, lambda p: sent.append(p) or "Have you had asthma, and do you still?")
+    interview.write_question([("NCT00000577", "patient_has_diagnosis_of_asthma_now"),
+                              ("NCT00000577", "patient_has_diagnosis_of_asthma_now"),  # same meaning: one line
+                              ("NCT00512837", "patient_has_finding_of_uncontrolled_asthma_now")])
+    assert sent[0].startswith("You are a research coordinator screening a patient for clinical trials")

@@ -9,8 +9,10 @@ replace it in smtstate/runner.py. Run this file to check it against the answer k
 from __future__ import annotations
 
 import json
+import re
 import sys
 
+from smt_trial_matching.answerability import _TIMEFRAME, parse
 from smt_trial_matching.data import load_split, patients, variable
 from smt_trial_matching.llm import ask_llm
 from smt_trial_matching.patient import ask_patient
@@ -19,6 +21,15 @@ WRITER_PROMPT = """You are a research coordinator screening a patient for a clin
 Write ONE short question, in plain everyday language, that asks the patient about this fact:
 {meaning}
 Reply with the question only."""
+
+GROUP_PROMPT = """You are a research coordinator screening a patient for clinical trials.
+Write ONE short, natural question, in plain everyday language, that covers all of these related facts:
+{meanings}
+Reply with the question only."""
+
+GROUP_SIZE = 4  # most facts asked about in one question
+GENERIC_WORDS = frozenset({"patient", "has", "is", "of", "finding", "diagnosis", "undergone", "taking", "exposed",
+                           "to", "value", "recorded", "the", "a", "an", "and", "or", "in", "with"})
 
 READER_PROMPT = """A research coordinator asked a patient a question. Find every fact below that the patient's
 reply clearly settles.
@@ -43,8 +54,19 @@ def describe(v: dict) -> str:
     return v["meaning"] or v["name"].replace("@@", ", specifically: ").replace("_", " ")
 
 
-def write_question(nct: str, var: str) -> str:
-    return ask_llm(WRITER_PROMPT.format(meaning=describe(variable(nct, var))))
+def topic(name: str) -> frozenset[str]:
+    """What a fact is about, without its timeframe or detail: "asthma" for has_finding_of_asthma_now,
+    has_finding_of_asthma_inthehistory and has_diagnosis_of_asthma_now alike."""
+    stem = _TIMEFRAME.sub("", parse(name)["stem"])
+    return frozenset(w for w in re.split(r"[^a-z0-9]+", stem) if w and w not in GENERIC_WORDS)
+
+
+def write_question(facts: list[tuple[str, str]]) -> str:
+    """One question about a fact, or about a group of related facts at once."""
+    meanings = list(dict.fromkeys(describe(variable(n, v)) for n, v in facts))
+    if len(meanings) == 1:
+        return ask_llm(WRITER_PROMPT.format(meaning=meanings[0]))
+    return ask_llm(GROUP_PROMPT.format(meanings="\n".join(f"- {m}" for m in meanings)))
 
 
 def read_reply(question: str, reply: str, facts: list[tuple[str, str]]) -> dict:
@@ -97,9 +119,12 @@ class LLMPatient:
         return facts
 
     def answer(self, qid: str, nct: str, var: str) -> bool | float | None:
-        question = write_question(nct, var)
+        facts = self.open_facts(nct, var)
+        # Ask about the chosen fact together with up to 3 open facts on the same topic (e.g. asthma ever + now).
+        group = [(nct, var)] + [(n, v) for n, v in facts[1:] if topic(v) == topic(var)][:GROUP_SIZE - 1]
+        question = write_question(group)
         reply = ask_patient(qid, question)
-        values = read_reply(question, reply, self.open_facts(nct, var))
+        values = read_reply(question, reply, facts)
         for (n, v), x in values.items():
             if (n, v) != (nct, var):
                 self.states[n].answers[v] = x
