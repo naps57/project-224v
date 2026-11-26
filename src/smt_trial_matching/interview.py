@@ -30,8 +30,13 @@ Patient's reply: {reply}
 Reply with ONE word only: {options}. Use unknown if the reply does not clearly settle the fact."""
 
 
+def describe(v: dict) -> str:
+    """The fact in words: its written meaning, or (for the quarter of variables without one) its name."""
+    return v["meaning"] or v["name"].replace("@@", ", specifically: ").replace("_", " ")
+
+
 def write_question(nct: str, var: str) -> str:
-    return ask_llm(WRITER_PROMPT.format(meaning=variable(nct, var)["meaning"]))
+    return ask_llm(WRITER_PROMPT.format(meaning=describe(variable(nct, var))))
 
 
 def read_answer(nct: str, var: str, question: str, reply: str) -> bool | float | None:
@@ -39,7 +44,7 @@ def read_answer(nct: str, var: str, question: str, reply: str) -> bool | float |
     is_bool = v["type"] == "Bool"
     rules = "\n".join(f"- {v[k]}" for k in ("when_true", "when_false", "when_value", "when_unknown") if v[k])
     options = "true, false or unknown" if is_bool else "a number, or unknown"
-    word = ask_llm(READER_PROMPT.format(meaning=v["meaning"], rules=rules, question=question,
+    word = ask_llm(READER_PROMPT.format(meaning=describe(v), rules=rules, question=question,
                                         reply=reply, options=options)).strip().strip(".").lower()
     if is_bool:
         return {"true": True, "false": False}.get(word)

@@ -36,3 +36,9 @@ def test_buckets():
     assert interview.bucket(None, False) == "missed"
     assert interview.bucket(True, None) == "made up"
     assert interview.bucket(False, True) == interview.bucket(30.0, 45.0) == "wrong"
+
+
+def test_a_variable_without_a_meaning_is_described_by_its_name():
+    v = {"name": "patient_has_finding_of_skin_lesion_now@@precludes_attachment_of_sensors", "meaning": None}
+    assert interview.describe(v) == ("patient has finding of skin lesion now, "
+                                     "specifically: precludes attachment of sensors")
