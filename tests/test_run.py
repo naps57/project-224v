@@ -29,3 +29,11 @@ def test_correct_counts_and_auc():
 def test_shown_question_counts_follow_the_budget():
     assert show_after(30) == [0, 5, 10, 20, 30]
     assert show_after(15) == [0, 5, 10, 15]
+
+
+def test_a_ruled_out_trial_is_explained_by_its_written_criterion():
+    from smt_trial_matching.explain import explain
+
+    reasons = explain("NCT00042705", {"patient_age_value_recorded_now_in_years": 39})
+    assert reasons[0]["criterion"] == "Age less than 11 years"
+    assert reasons[0]["because"] == [("patient_age_value_recorded_now_in_years", 39)]
