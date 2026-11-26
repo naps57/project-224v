@@ -4,7 +4,7 @@ Each rule in a trial's Z3 program is named REQ<k>_..., where k numbers the parag
 inclusion or exclusion criteria. For every rule that fails on its own given the patient's answers, Z3's unsat core
 names the answers responsible. Read only: it uses the staff's solver state without changing it.
 
-  uv run python -m smt_trial_matching.explain runs/dev_llm/ours.jsonl trec-202123
+  uv run python -m smt_trial_matching.explain results/dev/ours.jsonl trec-202123
 """
 
 from __future__ import annotations
@@ -41,14 +41,16 @@ def _rules(program) -> list[tuple[int, z3.BoolRef]]:
 
 
 def _criterion_text(nct: str, side: str, number: int, because: list) -> str:
-    """The written criterion for rule `number`, when its paragraph mentions what the failing answers are about
-    (a few trials number their paragraphs differently from their rules); otherwise the facts themselves."""
+    """The paragraph sharing the most topic words with the failing answers (nearest paragraph `number` on a tie);
+    if none shares any, the rule number and facts."""
     from smt_trial_matching.interview import topic
 
     texts = criteria(nct, side)
     words = {w for v, _ in because for w in topic(v) if len(w) > 3}
-    if number < len(texts) and any(w[:5] in texts[number].lower() for w in words):
-        return texts[number]
+    overlap = [sum(w[:5] in t.lower() for w in words) for t in texts]
+    best = max(range(len(texts)), key=lambda i: (overlap[i], -abs(i - number)), default=None)
+    if best is not None and overlap[best]:
+        return texts[best]
     return f"{side} rule {number + 1} (on: " + ", ".join(v for v, _ in because) + ")"
 
 
