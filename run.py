@@ -14,7 +14,8 @@ What it does:
      undecided counts as "eligible".
   3. Print accuracy after 0, 5, 10, ... questions, and the AUC: the area under the accuracy curve
      from 0 to the budget, on a 0-1 scale.
-  4. Check whether each agent's gap to greedy_smt is real or luck (a bootstrap: re-draw the
+  4. Check whether each agent's gap to greedy_smt (and, with --patient llm, to the LLM-only
+     baseline in src/smt_trial_matching/llm_only.py) is real or luck (a bootstrap: re-draw the
      patients at random 2,000 times and see how much the gap moves).
 
 With --patient lookup (the default) no language model runs and no API key is needed.
@@ -34,6 +35,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path[:0] = [str(ROOT), str(ROOT / "src")]
 
 from baselines.policies import greedy_smt, no_questions  # noqa: E402
+from smt_trial_matching import llm_only  # noqa: E402
 from smt_trial_matching import policies as ours  # noqa: E402
 from smt_trial_matching.data import load_gold, patients  # noqa: E402
 from smt_trial_matching.interview import LLMPatient  # noqa: E402
@@ -42,12 +44,13 @@ from smtstate.sim import AnswerKeySimulator  # noqa: E402
 
 AGENTS = {
     "no_questions": no_questions,  # asks nothing: the starting point
+    "llm_only": None,  # Gemini interviews and decides alone, no solver (needs --patient llm)
     "greedy_smt": greedy_smt,  # the course staff's baseline, the one to beat
     "ours": ours.answerable_informative,  # our agent: P(answered) x value
     "ours_no_answerability": ours.answerable_informative_no_answerability,  # ours without P(answered)
     "ours_no_value": ours.answerable_informative_no_value,  # ours without value
 }
-BASELINE = "greedy_smt"
+REFERENCES = ("greedy_smt", "llm_only")  # every agent is compared with these
 BOOTSTRAP_DRAWS = 2000
 SEED = 0
 
@@ -56,6 +59,8 @@ def interview(job):
     """One agent interviews one patient. Returns the log of the conversation.
     The patient is the answer-key lookup (perfect communication) or the LLM patient (a real conversation)."""
     patient, trials, agent, who, budget = job
+    if agent == "llm_only":
+        return llm_only.interview(patient, trials, budget)
     sim = LLMPatient() if who == "llm" else AnswerKeySimulator("gpt5_oracle")
     log = run_patient(patient, trials, AGENTS[agent], sim, budget=budget)
     if who == "llm":
@@ -115,7 +120,8 @@ def main(argv=None):
     if args.split == "test" and not args.confirmed:
         raise SystemExit("test is run once per final system: add --confirmed if that is what you mean")
 
-    agents = ["no_questions", "greedy_smt", "ours"]
+    agents = ["no_questions", "llm_only", "greedy_smt", "ours"] if args.patient == "llm" else \
+        ["no_questions", "greedy_smt", "ours"]
     if args.ablations:
         agents += ["ours_no_answerability", "ours_no_value"]
     patient_list = patients(args.split)  # [(patient, [its candidate trials]), ...]
@@ -125,7 +131,7 @@ def main(argv=None):
     out.mkdir(parents=True, exist_ok=True)
 
     # The bootstrap's re-draws: each row is the patient list drawn again at random, with repeats.
-    # Every agent uses the same re-draws, so the comparison with greedy_smt is like for like.
+    # Every agent uses the same re-draws, so every comparison is like for like.
     redraws = np.random.default_rng(SEED).integers(0, len(patient_list), size=(BOOTSTRAP_DRAWS, len(patient_list)))
 
     n_pairs = sum(len(trials) for _, trials in patient_list)
@@ -152,17 +158,18 @@ def main(argv=None):
                   + f"{auc(accuracy[agent], budget):>8.3f}{questions_per_patient:>11.1f}{not_sure:>12.1%}",
                   flush=True)
 
-    print(f"\ndifference from {BASELINE} [95% CI] (paired bootstrap over patients)")
-    for agent in agents:
-        if agent in (BASELINE, "no_questions"):
-            continue
-        gap_at_end = describe_gap(
-            accuracy[agent][budget] - accuracy[BASELINE][budget],
-            redrawn_accuracy[agent][:, budget] - redrawn_accuracy[BASELINE][:, budget])
-        gap_in_auc = describe_gap(
-            float(auc(accuracy[agent], budget) - auc(accuracy[BASELINE], budget)),
-            auc(redrawn_accuracy[agent], budget) - auc(redrawn_accuracy[BASELINE], budget))
-        print(f"{agent:<24} k={budget}: {gap_at_end}   AUC: {gap_in_auc}")
+    for ref in (r for r in REFERENCES if r in agents):
+        print(f"\ndifference from {ref} [95% CI] (paired bootstrap over patients)")
+        for agent in agents:
+            if agent in (ref, "no_questions") or (ref == "llm_only" and agent == "greedy_smt"):
+                continue
+            gap_at_end = describe_gap(
+                accuracy[agent][budget] - accuracy[ref][budget],
+                redrawn_accuracy[agent][:, budget] - redrawn_accuracy[ref][:, budget])
+            gap_in_auc = describe_gap(
+                float(auc(accuracy[agent], budget) - auc(accuracy[ref], budget)),
+                auc(redrawn_accuracy[agent], budget) - auc(redrawn_accuracy[ref], budget))
+            print(f"{agent:<24} k={budget}: {gap_at_end}   AUC: {gap_in_auc}")
     return 0
 
 
