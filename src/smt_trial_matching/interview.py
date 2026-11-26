@@ -113,9 +113,10 @@ class LLMPatient:
     parser fills every field an utterance settles). `attach` wraps a policy so the patient can see the trial states
     and write those extra answers into them; the asked fact's value is returned to the runner as usual."""
 
-    def __init__(self):
+    def __init__(self, link: bool = False):
         self.transcript = []
         self.states = None
+        self.link = link  # also fill the facts linked to each answer across trials (links.py)
         self.unknown_topics = set()  # topics the patient already said they don't know about
 
     def attach(self, policy):
@@ -155,8 +156,19 @@ class LLMPatient:
             if (n, v) != (nct, var):
                 self.states[n].answers[v] = x
         value = values.get((nct, var))
+        linked = {}
+        if self.link and self.states is not None:
+            from smt_trial_matching.links import propagate
+
+            linked = propagate(self.states, values)
+            for (n, v), x in linked.items():
+                if (n, v) == (nct, var):
+                    value = x
+                else:
+                    self.states[n].answers[v] = x
         self.transcript.append(dict(qid=qid, nct=nct, var=var, question=question, reply=reply, value=value,
-                                    also=[[n, v, x] for (n, v), x in values.items() if (n, v) != (nct, var)]))
+                                    also=[[n, v, x] for (n, v), x in values.items() if (n, v) != (nct, var)],
+                                    linked=[[n, v, x] for (n, v), x in linked.items()]))
         return value
 
 

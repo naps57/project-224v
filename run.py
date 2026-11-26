@@ -49,6 +49,7 @@ AGENTS = {
     "ours": ours.answerable_informative,  # our agent: P(answered) x value
     "ours_no_answerability": ours.answerable_informative_no_answerability,  # ours without P(answered)
     "ours_no_value": ours.answerable_informative_no_value,  # ours without value
+    "ours_linked": ours.answerable_informative,  # ours, with facts linked across trials (links.py)
     "ours_hybrid": ours.answerable_informative,  # ours, then Gemini judges the trials Z3 left undecided
 }
 REFERENCES = ("greedy_smt", "llm_only")  # every agent is compared with these
@@ -62,7 +63,7 @@ def interview(job):
     patient, trials, agent, who, budget = job
     if agent == "llm_only":
         return llm_only.interview(patient, trials, budget)
-    sim = LLMPatient() if who == "llm" else AnswerKeySimulator("gpt5_oracle")
+    sim = LLMPatient(link=agent == "ours_linked") if who == "llm" else AnswerKeySimulator("gpt5_oracle")
     policy = sim.attach(AGENTS[agent]) if who == "llm" else AGENTS[agent]  # lets each reply fill every fact it settles
     log = run_patient(patient, trials, policy, sim, budget=budget)
     if who == "llm":
