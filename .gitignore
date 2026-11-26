@@ -1,0 +1,18 @@
+# secrets
+.env
+
+# run outputs
+runs/
+logs/*
+!logs/reference/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# os
+.DS_Store
