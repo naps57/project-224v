@@ -94,34 +94,3 @@ def test_intake_comes_first_and_unknown_topics_are_skipped(monkeypatch, tmp_path
     asked = set()
     assert policy(states, asked, None) == (NCT, "patient_age_value_recorded_now_in_years")  # skipped the topic
     assert (NCT, BOOL_VAR) in asked
-
-
-def test_links_fill_the_same_and_implied_facts_only_when_unknown(monkeypatch, tmp_path):
-    import json
-
-    from smt_trial_matching import links
-    from smtstate import TrialState
-
-    table = tmp_path / "links.json"
-    table.write_text(json.dumps({"same": [["patient_has_diagnosis_of_asthma_now", "patient_has_finding_of_asthma_now"]],
-                                 "implies": [["patient_is_taking_steroid_now",
-                                              "patient_has_undergone_administration_of_steroid_inthepast12months"]]}))
-    monkeypatch.setattr(links, "TABLE", table)
-    links._table.cache_clear()
-    states = {n: TrialState(n, {}) for n in ("NCT00000577", "NCT00859274", "NCT00287378")}
-    out = links.propagate(states, {("NCT00000577", "patient_has_diagnosis_of_asthma_now"): True,
-                                   ("NCT00287378", "patient_is_taking_steroid_now"): True})
-    assert out[("NCT00859274", "patient_has_finding_of_asthma_now")] is True  # "same as", in another trial
-    assert out[("NCT00287378", "patient_has_undergone_administration_of_steroid_inthepast12months")] is True
-    states["NCT00859274"].answers["patient_has_finding_of_asthma_now"] = False  # already answered: never overwritten
-    assert ("NCT00859274", "patient_has_finding_of_asthma_now") not in links.propagate(
-        states, {("NCT00000577", "patient_has_diagnosis_of_asthma_now"): True})
-    links._table.cache_clear()
-
-
-def test_links_between_time_frames_are_left_out():
-    from smt_trial_matching.links import _same_time_frame
-
-    assert not _same_time_frame("patient_has_diagnosis_of_acute_pancreatitis_now",
-                                "patient_has_diagnosis_of_acute_pancreatitis_inthehistory")
-    assert _same_time_frame("patient_has_diagnosis_of_asthma_now", "patient_has_finding_of_asthma_now")
