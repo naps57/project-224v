@@ -1,14 +1,14 @@
 """Run the question-asking agents on the patients and print how accurate each one is.
 
-  uv run python run.py                           # dev patients: no_questions, greedy_smt, ours
-  uv run python run.py --ablations               # also two cut-down versions of ours
+  uv run python run.py                           # dev patients, LLM patient: no_questions, llm_only, ours, greedy_smt
+  uv run python run.py --ablations               # also ours without value
   uv run python run.py --split test --confirmed  # test patients
-  uv run python run.py --patient llm            # talk to the LLM patient instead of the answer key
+  uv run python run.py --patient lookup          # answer-key lookup instead of the LLM patient (no API key)
 
 What it does:
   1. Each agent interviews each patient, up to 10 questions (--budget), using the course staff's
-     conversation loop (smtstate/runner.py). The patient is the staff's answer-key lookup
-     (smtstate/sim.py) or, with --patient llm, our LLM patient (src/smt_trial_matching/interview.py).
+     conversation loop (smtstate/runner.py). The patient is our LLM patient
+     (src/smt_trial_matching/interview.py) or, with --patient lookup, the staff's answer-key lookup (smtstate/sim.py).
      Logs, with transcripts for the LLM patient, are saved to runs/<split>_<patient>/.
   2. After every question, count how many trial verdicts are right. A trial that is still
      undecided counts as "eligible".
@@ -18,8 +18,8 @@ What it does:
      baseline in src/smt_trial_matching/llm_only.py) is real or luck (a bootstrap: re-draw the
      patients at random 2,000 times and see how much the gap moves).
 
-With --patient lookup (the default) no language model runs and no API key is needed.
---patient llm calls Gemini and needs GEMINI_API_KEY.
+--patient llm (the default) calls Gemini and needs GEMINI_API_KEY.
+With --patient lookup no language model runs and no API key is needed.
 """
 
 import argparse
@@ -46,9 +46,8 @@ AGENTS = {
     "no_questions": no_questions,  # asks nothing: the starting point
     "llm_only": None,  # Gemini interviews and decides alone, no solver (needs --patient llm)
     "greedy_smt": greedy_smt,  # the course staff's baseline, the one to beat
-    "ours": ours.answerable_informative,  # our agent: P(answered) x value
-    "ours_no_answerability": ours.answerable_informative_no_answerability,  # ours without P(answered)
-    "ours_no_value": ours.answerable_informative_no_value,  # ours without value
+    "ours": ours.value_policy,  # our agent: the question whose answer could settle the most
+    "ours_no_value": ours.value_policy_no_value,  # ours without value: any question that could decide
 }
 REFERENCES = ("greedy_smt", "llm_only")  # every agent is compared with these
 BOOTSTRAP_DRAWS = 2000
@@ -112,9 +111,9 @@ def describe_gap(gap, redrawn_gaps):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run the agents and print their accuracy.")
     parser.add_argument("--split", choices=["dev", "test"], default="dev")
-    parser.add_argument("--ablations", action="store_true", help="also run the two cut-down versions of ours")
+    parser.add_argument("--ablations", action="store_true", help="also run ours without value")
     parser.add_argument("--confirmed", action="store_true", help="required for --split test")
-    parser.add_argument("--patient", choices=["lookup", "llm"], default="lookup",
+    parser.add_argument("--patient", choices=["lookup", "llm"], default="llm",
                         help="lookup = answer key (perfect communication), llm = LLM patient")
     parser.add_argument("--budget", type=int, default=10, help="most questions per patient")
     parser.add_argument("--agents", help="comma-separated agents to run instead of the default set")
@@ -127,7 +126,7 @@ def main(argv=None):
     if args.agents:
         agents = args.agents.split(",")
     if args.ablations:
-        agents += ["ours_no_answerability", "ours_no_value"]
+        agents += ["ours_no_value"]
     patient_list = patients(args.split)  # [(patient, [its candidate trials]), ...]
     gold = load_gold()  # (patient, trial) -> True if truly eligible
     budget, shown = args.budget, show_after(args.budget)

@@ -12,7 +12,6 @@ import json
 import re
 import sys
 
-from smt_trial_matching.answerability import _TIMEFRAME, parse
 from smt_trial_matching.data import load_split, patients, variable
 from smt_trial_matching.llm import ask_llm
 from smt_trial_matching.patient import ask_patient
@@ -40,6 +39,7 @@ INTAKE = (
     "to you, are you pregnant, breastfeeding, or using birth control?",
 )
 
+TIMEFRAME = re.compile(r"_(now|inthehistory|inthepast\w*|prior_to\w*|within\w*|during\w*)$")
 GROUP_SIZE = 4  # most facts asked about in one question
 GENERIC_WORDS = frozenset({"patient", "has", "is", "of", "finding", "diagnosis", "undergone", "taking", "exposed",
                            "to", "value", "recorded", "the", "a", "an", "and", "or", "in", "with"})
@@ -71,7 +71,7 @@ def describe(v: dict) -> str:
 def topic(name: str) -> frozenset[str]:
     """What a fact is about, without its timeframe or detail: "asthma" for has_finding_of_asthma_now,
     has_finding_of_asthma_inthehistory and has_diagnosis_of_asthma_now alike."""
-    stem = _TIMEFRAME.sub("", parse(name)["stem"])
+    stem = TIMEFRAME.sub("", name.partition("@@")[0])
     return frozenset(w for w in re.split(r"[^a-z0-9]+", stem) if w and w not in GENERIC_WORDS)
 
 
