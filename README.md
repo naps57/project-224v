@@ -175,7 +175,6 @@ Our code:
 | `src/smt_trial_matching/patient.py` | The LLM patient (the course's simulator prompt) |
 | `src/smt_trial_matching/llm_only.py` | The LLM-only baseline (the course's questioner prompt) |
 | `src/smt_trial_matching/explain.py` | Explains each ruled-out trial with Z3's unsat core |
-| `src/smt_trial_matching/audit.py` | How many of the LLM-only agent's rejections Z3 can back, and whether trial order changes verdicts |
 | `src/smt_trial_matching/llm.py` | Gemini calls, cached on disk |
 | `src/smt_trial_matching/data.py` | Reads the dataset |
 | `run.py` | Runs the agents and prints accuracy and the bootstrap tests |
