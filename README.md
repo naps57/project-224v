@@ -84,16 +84,25 @@ paired bootstrap over patients (2,000 re-draws), as printed by `run.py`. Logs of
 | ours − llm_only | +0.085 [+0.010, +0.176], **p = 0.023** | +0.091 [−0.066, +0.283], p = 0.353 | +0.088 [−0.003, +0.184], p = 0.063 |
 | ours − greedy_smt | +0.048 [−0.005, +0.101], p = 0.094 | +0.023 [−0.043, +0.090], p = 0.599 | +0.036 [−0.008, +0.080], p = 0.111 |
 
-- **Ours beats the LLM-only baseline by about 9 points on both dev and the held-out test patients.** It is
-  significant on dev; on test alone it is not, because the test gain is concentrated in a few patients with
-  many trials (net +16 correct verdicts: +13 on trec-202159, which has 17 trials, +7 on one other patient, and
-  −4 across the remaining 27 patients). Pooling dev and test (28 of the 57 patients were used during development) gives p = 0.063.
-- **Ours is ahead of greedy_smt on dev and test, but not significantly.** Both share the intake, the question
-  writer and the answer reader, so this row measures only the question choice, over the 6 questions after the
-  intake. With more questions the gap is larger: on dev, at 15 questions without the intake, ours beat
-  greedy_smt by +0.112 (p = 0.013).
-- **Every verdict of ours is decided by Z3** and can be explained with the criterion and the answer behind it
-  (`explain.py`); the LLM-only baseline's verdicts cannot.
+- **What the architecture gives.** Every verdict of ours is decided by Z3 and can be explained with the criterion
+  and the answer behind it (`explain.py`); the LLM-only baseline's verdicts cannot. When Z3 decides a trial it is
+  right 87% of the time on dev (59 of 68) and 91% on test (53 of 58). Asking nothing scores 0.532 on dev; with
+  perfect answers and no question limit ours reaches 0.947 (lookup patient, dev). Ten questions with the LLM
+  patient close about 60% of that gap.
+- **Against LLM-only.** Ours is ahead on both splits (+0.085 dev, +0.091 test), but significant only on dev, and
+  dev was used for every design choice, including the 10-question budget, so the dev p-value is optimistic. On
+  test the gain comes from two patients (+13 and +7 correct verdicts; trec-202159 has 17 trials). On the other 27
+  ours is net −4 (11 patients better, 9 tied, 9 worse). Pooling dev and test gives p = 0.063.
+- **Against greedy_smt (our question choice).** Both share the intake, the question writer and the answer reader,
+  so this row measures only which fact is asked about. With the LLM patient the gap (+0.048 dev, +0.023 test) is
+  not significant: at this sample size our question choice does not beat greedy. Most of the conversation's gains
+  (reading every fact a reply settles, asking related facts together) help greedy_smt just as much. With perfect
+  communication the question choice does separate (test, 30 questions: +0.114, p = 0.034).
+- **Where the errors are.** Most trials are still undecided after 10 questions (120 of 188 on dev, 117 of 175 on
+  test) and count as eligible. Ineligible trials that were never ruled out are 32 of ours' 41 errors on dev and
+  37 of 42 on test.
+- **Fewer eligible patients wrongly ruled out:** ours 9 vs LLM-only 14 on dev, 5 vs 7 on test. This measure was
+  chosen after seeing the results, so it is descriptive only.
 
 **What each change added** (ours, dev):
 
@@ -128,6 +137,9 @@ difference with the lookup patient, which answers from the same key it was fit o
 
 ## What could come next
 
+- **Sort the misses by cause.** For each ineligible trial never ruled out: was the deciding fact never asked,
+  asked with "not sure" as the answer, or not in the patient's note at all? The last is a limit no question
+  choice can fix.
 - **Ask fewer questions patients can't answer.** About two thirds of the questions after the intake get
   "not sure". P(answered) was fit on the GPT-5 answer key, which knows more than the patient says.
 
