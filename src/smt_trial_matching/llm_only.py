@@ -48,23 +48,3 @@ def interview(qid: str, trials: list[str], budget: int) -> dict:
                 turns=[dict(nct=None, var=None, question=q, answer=a, informative=False, verdicts=verdicts)
                        for q, a in transcript],
                 final_verdicts=verdicts)
-
-
-JUDGE_PROMPT = """You are screening a patient for this clinical trial.
-
-# Trial
-{trial}
-
-# Screening conversation
-{conversation}
-
-Based on the conversation, is the patient eligible for this trial? Treat criteria the conversation does not address
-as satisfied (unknown facts do not disqualify); answer ineligible only if the conversation shows a criterion fails.
-Reply with one word: eligible or ineligible."""
-
-
-def judge(nct: str, conversation: list[tuple[str, str]]) -> str:
-    """Gemini's verdict on one trial from a finished conversation (used for trials the solver left undecided)."""
-    said = "\n".join(f"Coordinator: {q}\nPatient: {a}" for q, a in conversation)
-    reply = ask_llm(JUDGE_PROMPT.format(trial=trial_text(nct), conversation=said)).strip().lower()
-    return "ineligible" if reply.startswith("ineligible") else "eligible"

@@ -56,7 +56,6 @@ NCT00287378: ineligible
 | **ours** | P(answered) × value, over the facts Z3 says could still matter | Z3 | `src/smt_trial_matching/policies.py` |
 | `greedy_smt` (course baseline) | Any fact whose answer could decide a trial | Z3 | `baselines/policies.py` |
 | `llm_only` (course baseline) | Gemini, from the trials' criteria text and the conversation so far | Gemini | `src/smt_trial_matching/llm_only.py` |
-| `ours_hybrid` | As ours | Z3; Gemini only for the trials Z3 leaves undecided (logged as unverified) | `run.py`, `llm_only.judge` |
 
 - **P(answered)** is a logistic regression on the words of a fact's name (`answerability.py`). It is fit on
   dev patients only, and each dev patient is scored by a model fit on the other dev patients.
@@ -79,13 +78,11 @@ paired bootstrap over patients (2,000 re-draws), as printed by `run.py`. Logs of
 | llm_only | 0.697 | 0.669 | 0.683 |
 | greedy_smt | 0.734 | 0.737 | 0.736 |
 | **ours** | **0.782** | **0.760** | **0.771** |
-| ours_hybrid | 0.782 | 0.794 | 0.788 |
 
 | Comparison | Dev | Test | Dev + test |
 |---|---|---|---|
 | ours − llm_only | +0.085 [+0.010, +0.176], **p = 0.023** | +0.091 [−0.066, +0.283], p = 0.353 | +0.088 [−0.003, +0.184], p = 0.063 |
 | ours − greedy_smt | +0.048 [−0.005, +0.101], p = 0.094 | +0.023 [−0.043, +0.090], p = 0.599 | +0.036 [−0.008, +0.080], p = 0.111 |
-| ours_hybrid − llm_only | +0.085 [−0.026, +0.225], p = 0.213 | +0.126 [−0.045, +0.310], p = 0.182 | +0.105 [−0.003, +0.218], p = 0.061 |
 
 - **Ours beats the LLM-only baseline by about 9 points on both dev and the held-out test patients.** It is
   significant on dev; on test alone it is not, because the test gain is concentrated in a few patients with
@@ -95,8 +92,6 @@ paired bootstrap over patients (2,000 re-draws), as printed by `run.py`. Logs of
   writer and the answer reader, so this row measures only the question choice, over the 6 questions after the
   intake. With more questions the gap is larger: on dev, at 15 questions without the intake, ours beat
   greedy_smt by +0.112 (p = 0.013).
-- **The hybrid** changes only the trials Z3 leaves undecided. On dev Gemini's verdicts there fixed 14 and broke
-  14 (no net change); on test they added 3.4 points. Its Gemini verdicts are not verifiable.
 - **Every verdict of ours is decided by Z3** and can be explained with the criterion and the answer behind it
   (`explain.py`); the LLM-only baseline's verdicts cannot.
 
@@ -115,6 +110,18 @@ occasionally pushed a correct verdict the wrong way.
 **Reference: lookup patient (perfect communication).** Before the LLM conversation, the patient was a lookup
 table of GPT-5's reading of each note (`smtstate/sim.py`, `data/answer_keys/gpt5_oracle.jsonl`). On test at
 30 questions: ours 0.760, greedy_smt 0.646 (+0.114, p = 0.034).
+
+**Which parts of the score matter** (dev, lookup patient, 30 questions, `run.py --ablations --budget 30`):
+
+| Agent | 10 questions | 30 questions | AUC |
+|---|---|---|---|
+| ours | 0.670 | 0.793 | 0.700 |
+| ours without P(answered) | 0.670 | 0.793 | 0.695 |
+| ours without value | 0.633 | 0.718 | 0.649 |
+| greedy_smt | 0.564 | 0.691 | 0.599 |
+
+Value carries the gain over greedy_smt (+0.101, p = 0.026; without value +0.027, p = 0.648). P(answered) makes no
+difference with the lookup patient, which answers from the same key it was fit on.
 
 **Answer reader check.** On 103 facts from 2 dev patients, the reader agreed with the GPT-5 answer key on
 89%, missed 7% (said unknown), gave a value where the key said unknown on 4%, and gave a wrong value on 0%.

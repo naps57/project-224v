@@ -49,7 +49,6 @@ AGENTS = {
     "ours": ours.answerable_informative,  # our agent: P(answered) x value
     "ours_no_answerability": ours.answerable_informative_no_answerability,  # ours without P(answered)
     "ours_no_value": ours.answerable_informative_no_value,  # ours without value
-    "ours_hybrid": ours.answerable_informative,  # ours, then Gemini judges the trials Z3 left undecided
 }
 REFERENCES = ("greedy_smt", "llm_only")  # every agent is compared with these
 BOOTSTRAP_DRAWS = 2000
@@ -67,14 +66,6 @@ def interview(job):
     log = run_patient(patient, trials, policy, sim, budget=budget)
     if who == "llm":
         log["transcript"] = sim.transcript
-    if agent == "ours_hybrid":
-        # Z3's verdicts stand. Only trials it left undecided get Gemini's verdict, logged as unverified.
-        conversation = [(t["question"], t["reply"]) for t in log.get("transcript", [])]
-        log["unverified"] = [n for n in trials if log["final_status"][n] == "undetermined"]
-        for n in log["unverified"]:
-            log["final_verdicts"][n] = llm_only.judge(n, conversation)
-            if log["turns"]:
-                log["turns"][-1]["verdicts"][n] = log["final_verdicts"][n]
     return log
 
 
